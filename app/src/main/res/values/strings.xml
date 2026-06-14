@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Todolist</string>
+    <string name="ai_suggestions_title">AI SUGGESTIONS ✨</string>
+    <string name="life_progress">LIFE PROGRESS</string>
+    <string name="days_consistent">days consistent</string>
+    <string name="todays_focus">TODAY\'S FOCUS</string>
+    <!-- Replace this with your actual Web Client ID from Firebase/Google Cloud Console -->
+    <string name="default_web_client_id">YOUR_WEB_CLIENT_ID.apps.googleusercontent.com</string>
+</resources>

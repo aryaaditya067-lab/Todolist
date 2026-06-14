@@ -1,0 +1,44 @@
+<androidx.wear.widget.BoxInsetLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000"
+    app:boxedEdges="all">
+    <FrameLayout android:layout_width="match_parent" android:layout_height="match_parent" android:paddingLeft="8dp" android:paddingRight="8dp">
+        <!--  Habit Dots Background (subtle)  -->
+        <com.example.todolist.wear.WearHabitDotsView android:id="@+id/wearHabitDots" android:layout_width="match_parent" android:layout_height="match_parent" android:alpha="0.15"/>
+        <!--  Main content column  -->
+        <LinearLayout android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical">
+            <!--  Header: Date + Summary  -->
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:paddingTop="18dp" android:paddingBottom="4dp" android:gravity="center_vertical">
+                <TextView android:id="@+id/txtWearDate" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:textColor="#FFFFFF" android:textSize="11sp" android:textStyle="bold" android:letterSpacing="0.05" android:paddingStart="8dp" tools:text="Mon, Jun 5"/>
+                <!--  Done/Total badge  -->
+                <TextView
+                    android:id="@+id/txtWearSummary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_wear_badge"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="2dp"
+                    android:textColor="#FF6B00"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
+                    android:paddingEnd="8dp"
+                    tools:text="2/5"/>
+            </LinearLayout>
+            <!--  Task list  -->
+            <androidx.wear.widget.WearableRecyclerView android:id="@+id/wearRecyclerView" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:scrollbars="none"/>
+            <!--  Empty / loading state  -->
+            <TextView android:id="@+id/txtWearStatus" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center" android:textColor="#80FFFFFF" android:textSize="13sp" android:visibility="gone" tools:text="All done! 🎉" tools:visibility="visible"/>
+        </LinearLayout>
+        <!--  Loading spinner  -->
+        <ProgressBar
+            android:id="@+id/progressWear"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="center"
+            android:indeterminateTint="#FF6B00"
+            android:visibility="visible"/>
+    </FrameLayout>
+</androidx.wear.widget.BoxInsetLayout>
