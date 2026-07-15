@@ -1,4 +1,4 @@
-package com.example.myapplication
+package com.example.core.domain.model
 
 import android.os.Parcelable
 import kotlinx.parcelize.Parcelize
@@ -76,10 +76,6 @@ data class Task(
     }
 
     companion object {
-
-        // ─── FIX 1: Firestore se number safely parse karo ────────────────────
-        // Firestore kabhi Long, kabhi Int, kabhi Double bhejta hai
-        // Ye helper har case handle karta hai
         private fun Any?.toLongSafe(): Long = when (this) {
             is Long -> this
             is Int -> this.toLong()
@@ -116,22 +112,14 @@ data class Task(
                 priority = runCatching {
                     TaskPriority.valueOf(map["priority"] as? String ?: "MEDIUM")
                 }.getOrDefault(TaskPriority.MEDIUM),
-
-                // ─── FIX 2: date — ab sahi parse hoga chahe koi bhi type aaye ──
                 date = map["date"].toLongSafe(),
-
-                // ─── FIX 3: reminderTime — nullable Long safely ───────────────
                 reminderTime = map["reminderTime"].toLongOrNull(),
-
                 done = (map["done"] as? Boolean) ?: false,
                 timerType = runCatching {
                     TimerType.valueOf(map["timerType"] as? String ?: "NONE")
                 }.getOrDefault(TimerType.NONE),
-
-                // ─── FIX 4: Int fields — toIntSafe() se parse ────────────────
                 timerSeconds = map["timerSeconds"].toIntSafe(),
                 targetSeconds = map["targetSeconds"].toIntSafe(),
-
                 timerStatus = runCatching {
                     TimerStatus.valueOf(map["timerStatus"] as? String ?: "NOT_STARTED")
                 }.getOrDefault(TimerStatus.NOT_STARTED),
