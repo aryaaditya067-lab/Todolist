@@ -310,59 +310,6 @@
                 android:textSize="12sp"
                 android:letterSpacing="0.1" />
 
-            <!-- AI Roast Section (Hidden by default, shown on notification click or sync) -->
-            <com.google.android.material.card.MaterialCardView
-                android:id="@+id/cardAiRoast"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
-                android:layout_marginBottom="16dp"
-                android:visibility="gone"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="0dp"
-                app:strokeWidth="1dp"
-                app:strokeColor="@color/accent_primary"
-                app:cardBackgroundColor="@color/glass_white_5"
-                tools:visibility="visible">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="20dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="AI ROAST 💀"
-                        android:textColor="@color/accent_primary"
-                        android:textSize="14sp"
-                        android:textStyle="bold"
-                        android:letterSpacing="0.1" />
-
-                    <ProgressBar
-                        android:id="@+id/progressRoast"
-                        style="?android:attr/progressBarStyleSmall"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_gravity="center"
-                        android:visibility="gone"
-                        android:indeterminateTint="@color/accent_primary" />
-
-                    <TextView
-                        android:id="@+id/txtAiRoast"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="8dp"
-                        android:textColor="@color/text_primary"
-                        android:textSize="16sp"
-                        android:lineSpacingExtra="4dp"
-                        android:alpha="0.9"
-                        tools:text="Bro added 10 tasks and completed 0. Even your snooze button works harder 💀" />
-
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
             <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

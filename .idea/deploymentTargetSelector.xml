@@ -4,7 +4,7 @@
     <selectionStates>
       <SelectionState runConfigName="Todolist App">
         <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-06-14T08:44:37.887546600Z">
+        <DropdownSelection timestamp="2026-06-16T07:22:47.969543700Z">
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="PhysicalDevice" identifier="serial=RZCX924G0YH" />
@@ -21,23 +21,23 @@
           </targets>
         </DialogSelection>
       </SelectionState>
-      <SelectionState runConfigName="myapplication">
-        <option name="selectionMode" value="DROPDOWN" />
-        <DropdownSelection timestamp="2026-06-13T15:23:47.600313500Z">
-          <Target type="DEFAULT_BOOT">
-            <handle>
-              <DeviceId pluginId="PhysicalDevice" identifier="serial=RZAY6009DPJ" />
-            </handle>
-          </Target>
-        </DropdownSelection>
-        <DialogSelection />
-      </SelectionState>
       <SelectionState runConfigName="WEAR">
         <option name="selectionMode" value="DROPDOWN" />
         <DropdownSelection timestamp="2026-06-13T13:55:39.164327Z">
           <Target type="DEFAULT_BOOT">
             <handle>
               <DeviceId pluginId="Default" identifier="serial=192.168.25.9:37057;connection=cadc1bc6" />
+            </handle>
+          </Target>
+        </DropdownSelection>
+        <DialogSelection />
+      </SelectionState>
+      <SelectionState runConfigName="wear">
+        <option name="selectionMode" value="DROPDOWN" />
+        <DropdownSelection timestamp="2026-06-13T15:23:47.600313500Z">
+          <Target type="DEFAULT_BOOT">
+            <handle>
+              <DeviceId pluginId="PhysicalDevice" identifier="serial=RZAY6009DPJ" />
             </handle>
           </Target>
         </DropdownSelection>

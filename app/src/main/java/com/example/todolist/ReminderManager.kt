@@ -1,18 +1,20 @@
 package com.example.todolist
 
 import android.content.Context
+import com.example.core.domain.model.Task
 import androidx.work.*
 import java.util.concurrent.TimeUnit
 
 class ReminderManager(private val context: Context) {
 
     fun scheduleReminder(task: Task) {
-        if (task.done || task.reminderTime == null) {
+        val reminderTime = task.reminderTime
+        if (task.done || reminderTime == null) {
             cancelReminder(task.id)
             return
         }
 
-        val delay = task.reminderTime - System.currentTimeMillis()
+        val delay = reminderTime - System.currentTimeMillis()
         if (delay <= 0) return // Time has already passed
 
         val data = workDataOf(

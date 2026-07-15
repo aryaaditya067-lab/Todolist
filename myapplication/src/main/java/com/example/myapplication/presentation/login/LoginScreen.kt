@@ -12,42 +12,49 @@ import androidx.wear.compose.material3.Button
 import androidx.wear.compose.material3.ButtonDefaults
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
-import com.example.myapplication.presentation.theme.AMOLEDBlack
-import com.example.myapplication.presentation.theme.OrangeAccent
+import com.example.myapplication.presentation.theme.DeepSpace
+import com.example.myapplication.presentation.theme.SafetyOrange
 
 @Composable
-fun LoginScreen(onSignInClick: () -> Unit) {
+fun LoginScreen(
+    onContinueOnPhoneClick: () -> Unit,
+    onGoogleSignInClick: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(AMOLEDBlack),
+            .background(DeepSpace),
         contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
         ) {
             Text(
                 text = "Todolist",
                 style = MaterialTheme.typography.titleMedium,
-                color = OrangeAccent,
+                color = SafetyOrange,
                 textAlign = TextAlign.Center
             )
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
+            
             Button(
-                onClick = onSignInClick,
-                colors = ButtonDefaults.buttonColors(containerColor = OrangeAccent),
+                onClick = onGoogleSignInClick,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Sign In", color = Color.Black)
+                Text("Sign in with Google", color = Color.Black, style = MaterialTheme.typography.labelSmall)
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "Use same account as phone",
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.Gray,
-                textAlign = TextAlign.Center
-            )
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Button(
+                onClick = onContinueOnPhoneClick,
+                colors = ButtonDefaults.buttonColors(containerColor = SafetyOrange),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Open phone app", color = Color.Black, style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }

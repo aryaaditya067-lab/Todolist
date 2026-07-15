@@ -23,3 +23,4 @@ rootProject.name = "Todolist"
 include(":app")
 include(":myapplication")
 include(":WEAR")
+include(":core")

@@ -34,12 +34,12 @@ import androidx.wear.compose.foundation.lazy.*
 import androidx.wear.compose.foundation.rotary.RotaryScrollableDefaults
 import androidx.wear.compose.foundation.rotary.rotaryScrollable
 import androidx.wear.compose.material3.*
-import com.example.myapplication.HabitProgress
-import com.example.myapplication.Task
+import com.example.core.domain.model.HabitProgress
+import com.example.core.domain.model.Task
 import com.example.myapplication.presentation.components.HabitCard
 import com.example.myapplication.presentation.components.ProgressCard
 import com.example.myapplication.presentation.components.TaskItem
-import com.example.myapplication.presentation.theme.OrangeAccent
+import com.example.myapplication.presentation.theme.SafetyOrange
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -52,6 +52,7 @@ fun HomeScreen(
     completedCount: Int,
     totalCount: Int,
     isLoading: Boolean,
+    errorMessage: String?,
     onToggleTask: (Task) -> Unit,
     onDeleteTask: (Task) -> Unit,
     onVoiceTask: (String) -> Unit
@@ -59,6 +60,12 @@ fun HomeScreen(
     val listState = rememberTransformingLazyColumnState()
     val focusRequester = remember { FocusRequester() }
     val context = LocalContext.current
+
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val progress by remember(completedCount, totalCount) {
         derivedStateOf {
@@ -129,7 +136,10 @@ fun HomeScreen(
                                 val scale = calculateItemScale(scrollProgress)
                                 scaleX = scale
                                 scaleY = scale
+                                // Use graphicsLayer for alpha to avoid recomposition
                                 alpha = lerp(0.2f, 1f, (1f - calculateItemDistance(scrollProgress)).coerceIn(0f, 1f))
+                                // Ensure layer is used to speed up rendering
+                                clip = true
                             }
                     ) {
                         TaskItem(task = task, onToggle = { onToggleTask(task) }, onDelete = { onDeleteTask(task) })
@@ -192,13 +202,13 @@ private fun VoiceAddButton(onClick: () -> Unit) {
         )
     ) {
         Box(
-            modifier = Modifier.size(42.dp).clip(CircleShape).background(OrangeAccent.copy(alpha = 0.1f)).border(1.dp, OrangeAccent.copy(alpha = 0.3f), CircleShape),
+            modifier = Modifier.size(42.dp).clip(CircleShape).background(SafetyOrange.copy(alpha = 0.1f)).border(1.dp, SafetyOrange.copy(alpha = 0.3f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(imageVector = Icons.Default.Mic, contentDescription = "Voice Add", tint = OrangeAccent, modifier = Modifier.size(24.dp))
+            Icon(imageVector = Icons.Default.Mic, contentDescription = "Voice Add", tint = SafetyOrange, modifier = Modifier.size(24.dp))
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(text = "Add Task", style = MaterialTheme.typography.labelSmall, color = OrangeAccent, fontWeight = FontWeight.Bold)
+        Text(text = "Add Task", style = MaterialTheme.typography.labelSmall, color = SafetyOrange, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -220,7 +230,7 @@ private fun EmptyTasksView() {
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
     ) {
-        Icon(imageVector = Icons.Default.TaskAlt, contentDescription = "Success", tint = OrangeAccent, modifier = Modifier.size(40.dp))
+        Icon(imageVector = Icons.Default.TaskAlt, contentDescription = "Success", tint = SafetyOrange, modifier = Modifier.size(40.dp))
         Text(text = "All Done! 🎉", color = Color.Gray, style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -246,20 +256,24 @@ private fun FluidBackground(progress: Float) {
 
         val path1 = Path().apply {
             moveTo(0f, h); lineTo(0f, fillLevel)
-            for (x in 0..w.toInt() step 5) {
-                lineTo(x.toFloat(), fillLevel + sin(x / 60f + wave1) * 12f)
+            var x = 0f
+            while (x <= w) {
+                lineTo(x, fillLevel + sin(x / 60f + wave1) * 12f)
+                x += 15f // Increased step size from 5 to 15
             }
             lineTo(w, h); close()
         }
         val path2 = Path().apply {
             moveTo(0f, h); lineTo(0f, fillLevel)
-            for (x in 0..w.toInt() step 5) {
-                lineTo(x.toFloat(), fillLevel + cos(x / 80f + wave2) * 10f)
+            var x = 0f
+            while (x <= w) {
+                lineTo(x, fillLevel + cos(x / 80f + wave2) * 10f)
+                x += 15f // Increased step size from 5 to 15
             }
             lineTo(w, h); close()
         }
-        drawPath(path1, color = OrangeAccent.copy(alpha = 0.04f))
-        drawPath(path2, color = OrangeAccent.copy(alpha = 0.06f))
+        drawPath(path1, color = SafetyOrange.copy(alpha = 0.04f))
+        drawPath(path2, color = SafetyOrange.copy(alpha = 0.06f))
     }
 }
 

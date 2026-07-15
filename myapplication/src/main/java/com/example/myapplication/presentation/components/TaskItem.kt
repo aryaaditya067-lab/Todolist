@@ -24,9 +24,9 @@ import androidx.wear.compose.material3.Icon
 import androidx.wear.compose.material3.IconButton
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
-import com.example.myapplication.Task
-import com.example.myapplication.TaskPriority
-import com.example.myapplication.presentation.theme.OrangeAccent
+import com.example.core.domain.model.Task
+import com.example.core.domain.model.TaskPriority
+import com.example.myapplication.presentation.theme.SafetyOrange
 
 @Composable
 fun TaskItem(
@@ -38,7 +38,7 @@ fun TaskItem(
     val priorityColor = remember(task.priority) {
         when (task.priority) {
             TaskPriority.HIGH -> Color.Red
-            TaskPriority.MEDIUM -> OrangeAccent
+            TaskPriority.MEDIUM -> SafetyOrange
             TaskPriority.LOW -> Color.Gray
         }
     }
@@ -64,8 +64,8 @@ fun TaskItem(
                 modifier = Modifier
                     .size(24.dp)
                     .clip(CircleShape)
-                    .border(2.dp, if (task.done) OrangeAccent else Color.Gray, CircleShape)
-                    .background(if (task.done) OrangeAccent else Color.Transparent),
+                    .border(2.dp, if (task.done) SafetyOrange else Color.Gray, CircleShape)
+                    .background(if (task.done) SafetyOrange else Color.Transparent),
                 contentAlignment = Alignment.Center
             ) {
                 if (task.done) {

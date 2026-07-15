@@ -6,12 +6,18 @@ import androidx.wear.watchface.complications.data.ShortTextComplicationData
 import androidx.wear.watchface.complications.data.PlainComplicationText
 import androidx.wear.watchface.complications.datasource.ComplicationRequest
 import androidx.wear.watchface.complications.datasource.SuspendingComplicationDataSourceService
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.tasks.await
+import com.example.core.domain.repository.TaskRepository
+import com.example.core.util.Resource
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
 import java.util.Calendar
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class TaskComplicationService : SuspendingComplicationDataSourceService() {
+
+    @Inject
+    lateinit var taskRepository: TaskRepository
 
     override fun getPreviewData(type: ComplicationType): ComplicationData? {
         if (type != ComplicationType.SHORT_TEXT) return null
@@ -22,7 +28,7 @@ class TaskComplicationService : SuspendingComplicationDataSourceService() {
     }
 
     override suspend fun onComplicationRequest(request: ComplicationRequest): ComplicationData? {
-        if (request.complicationType != ComplicationType.SHORT_TEXT) return null
+        if (request.complicationType != ShortTextComplicationData.TYPE) return null
 
         val count = fetchRemainingTaskCount()
         
@@ -33,7 +39,6 @@ class TaskComplicationService : SuspendingComplicationDataSourceService() {
     }
 
     private suspend fun fetchRemainingTaskCount(): Int {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return 0
         val today = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -44,18 +49,9 @@ class TaskComplicationService : SuspendingComplicationDataSourceService() {
         val tomorrow = today + 24 * 60 * 60 * 1000
 
         return try {
-            val snapshot = FirebaseFirestore.getInstance()
-                .collection("users").document(uid)
-                .collection("tasks")
-                .whereGreaterThanOrEqualTo("date", today)
-                .whereLessThan("date", tomorrow)
-                .get().await()
-
-            snapshot.documents.count { doc ->
-                val done = doc.getBoolean("done") ?: false
-                val isTemplate = doc.getBoolean("isRecurringTemplate") ?: false
-                !done && !isTemplate
-            }
+            val resource = taskRepository.getTasksFlow().first { it !is Resource.Loading }
+            val tasks = resource.data ?: emptyList()
+            tasks.count { it.date in today until tomorrow && !it.done && !it.isRecurringTemplate }
         } catch (e: Exception) {
             0
         }

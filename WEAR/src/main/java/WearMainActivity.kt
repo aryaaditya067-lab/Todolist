@@ -44,19 +44,6 @@ class WearMainActivity : AppCompatActivity() {
         setupHabitView()
         observeViewModel()
         updateDateHeader()
-        schedulePeriodicRoast()
-    }
-
-    private fun schedulePeriodicRoast() {
-        val roastWorkRequest = PeriodicWorkRequestBuilder<WearRoastWorker>(4, java.util.concurrent.TimeUnit.HOURS)
-            .addTag("periodic_roast")
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "periodic_roast",
-            ExistingPeriodicWorkPolicy.KEEP,
-            roastWorkRequest
-        )
     }
 
     private fun setupRecyclerView() {

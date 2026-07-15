@@ -6,19 +6,29 @@ import android.content.Intent
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import com.example.core.domain.model.*
+import com.example.todolist.data.local.dao.TaskDao
+import com.example.todolist.data.local.db.AppDatabase
+import com.example.todolist.data.mapper.toDomain
+import com.example.todolist.data.mapper.toEntity
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
 import java.util.*
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class TimerService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
     private var timerJob: Job? = null
-    private lateinit var taskDao: TaskDao
+    
+    @Inject
+    lateinit var taskDao: TaskDao
+    
     private var currentTaskId: Int = -1
 
     override fun onCreate() {
         super.onCreate()
-        taskDao = AppDatabase.getDatabase(this).taskDao()
         createNotificationChannel()
     }
 
@@ -49,7 +59,8 @@ class TimerService : Service() {
         timerJob?.cancel()
         timerJob = serviceScope.launch {
             while (isActive) {
-                val task = taskDao.getTaskById(taskId)
+                val entity = taskDao.getTaskById(taskId)
+                val task = entity?.toDomain()
                 
                 if (task == null || task.timerStatus != TimerStatus.RUNNING || task.done) {
                     stopSelf()
@@ -58,7 +69,7 @@ class TimerService : Service() {
 
                 if (task.timerSeconds > 0) {
                     val newSeconds = task.timerSeconds - 1
-                    taskDao.updateTask(task.copy(timerSeconds = newSeconds))
+                    taskDao.updateTask(task.copy(timerSeconds = newSeconds).toEntity())
                     updateNotification(task.title, newSeconds)
                     delay(1000)
                 } else {
@@ -66,7 +77,7 @@ class TimerService : Service() {
                         timerStatus = TimerStatus.FINISHED,
                         timerSeconds = 0,
                         done = task.autoCompleteOnTimerEnd
-                    ))
+                    ).toEntity())
                     showFinishedNotification(task.title)
                     stopSelf()
                     break
@@ -78,9 +89,9 @@ class TimerService : Service() {
     private fun pauseTimer() {
         timerJob?.cancel()
         serviceScope.launch {
-            val task = taskDao.getTaskById(currentTaskId)
-            task?.let {
-                taskDao.updateTask(it.copy(timerStatus = TimerStatus.PAUSED))
+            val entity = taskDao.getTaskById(currentTaskId)
+            entity?.toDomain()?.let {
+                taskDao.updateTask(it.copy(timerStatus = TimerStatus.PAUSED).toEntity())
                 updateNotification(it.title, it.timerSeconds, isPaused = true)
             }
         }

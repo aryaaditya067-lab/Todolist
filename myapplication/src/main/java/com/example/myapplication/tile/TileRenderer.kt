@@ -9,13 +9,104 @@ import java.util.Calendar
 
 object TileRenderer {
 
-    private val C_ORANGE      = 0xFFFF6B00.toInt()
-    private val C_ORANGE_HALF = 0x80FF6B00.toInt() 
+    private val C_ORANGE      = 0xFFFF6700.toInt()
+    private val C_ORANGE_HALF = 0x80FF6700.toInt() 
     private val C_WHITE       = 0xFFFFFFFF.toInt()
     private val C_GRAY        = 0xFF888888.toInt()
-    private val C_DARK        = 0xFF222222.toInt()
-    private val C_AMOLED      = 0xFF000000.toInt()
+    private val C_DARK        = 0xFF242526.toInt()
+    private val C_AMOLED      = 0xFF121212.toInt()
     private const val FONT_ROUNDED = "sans-serif-rounded"
+
+    fun buildTaskTileLayout(
+        completedCount: Int,
+        totalCount: Int,
+        topTasks: List<String>
+    ): LayoutElement {
+        val progress = if (totalCount > 0) completedCount.toFloat() / totalCount else 0f
+        
+        val progressCircle = Box.Builder()
+            .setWidth(dp(44f))
+            .setHeight(dp(44f))
+            .setModifiers(Modifiers.Builder()
+                .setBackground(Background.Builder()
+                    .setColor(argb(C_DARK))
+                    .setCorner(Corner.Builder().setRadius(dp(22f)).build())
+                    .build())
+                .build())
+            .addContent(
+                Text.Builder()
+                    .setText("${(progress * 100).toInt()}%")
+                    .setFontStyle(FontStyle.Builder()
+                        .setPreferredFontFamilies(FONT_ROUNDED)
+                        .setSize(sp(12f))
+                        .setWeight(FONT_WEIGHT_BOLD)
+                        .setColor(argb(C_ORANGE))
+                        .build())
+                    .build()
+            ).build()
+
+        val taskColumn = Column.Builder()
+            .setWidth(expand())
+            .setHorizontalAlignment(HORIZONTAL_ALIGN_START)
+            .apply {
+                if (topTasks.isEmpty()) {
+                    addContent(
+                        Text.Builder()
+                            .setText("All done! 🎉")
+                            .setFontStyle(FontStyle.Builder()
+                                .setPreferredFontFamilies(FONT_ROUNDED)
+                                .setSize(sp(14f))
+                                .setColor(argb(C_WHITE))
+                                .build())
+                            .build()
+                    )
+                } else {
+                    topTasks.take(3).forEach { taskTitle ->
+                        addContent(
+                            Text.Builder()
+                                .setText("• $taskTitle")
+                                .setFontStyle(FontStyle.Builder()
+                                    .setPreferredFontFamilies(FONT_ROUNDED)
+                                    .setSize(sp(13f))
+                                    .setColor(argb(C_WHITE))
+                                    .build())
+                                .setMaxLines(1)
+                                .build()
+                        )
+                        addContent(Spacer.Builder().setHeight(dp(2f)).build())
+                    }
+                }
+            }.build()
+
+        return Box.Builder()
+            .setWidth(expand())
+            .setHeight(expand())
+            .setModifiers(Modifiers.Builder()
+                .setBackground(Background.Builder().setColor(argb(C_AMOLED)).build())
+                .setPadding(Padding.Builder().setAll(dp(12f)).build())
+                .build())
+            .addContent(
+                Column.Builder()
+                    .setWidth(expand())
+                    .setHorizontalAlignment(HORIZONTAL_ALIGN_CENTER)
+                    .addContent(
+                        Row.Builder()
+                            .setWidth(expand())
+                            .setVerticalAlignment(VERTICAL_ALIGN_CENTER)
+                            .addContent(progressCircle)
+                            .addContent(Spacer.Builder().setWidth(dp(10f)).build())
+                            .addContent(
+                                Column.Builder()
+                                    .addContent(Text.Builder().setText("TODAY").setFontStyle(FontStyle.Builder().setSize(sp(10f)).setColor(argb(C_GRAY)).build()).build())
+                                    .addContent(Text.Builder().setText("$completedCount/$totalCount").setFontStyle(FontStyle.Builder().setSize(sp(16f)).setWeight(FONT_WEIGHT_BOLD).setColor(argb(C_WHITE)).build()).build())
+                                    .build()
+                            ).build()
+                    )
+                    .addContent(Spacer.Builder().setHeight(dp(12f)).build())
+                    .addContent(taskColumn)
+                    .build()
+            ).build()
+    }
 
     fun buildLayout(data: TileData): LayoutElement {
         val now = System.currentTimeMillis()

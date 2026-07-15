@@ -15,8 +15,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
-import com.example.myapplication.HabitProgress
-import com.example.myapplication.presentation.theme.OrangeAccent
+import com.example.core.domain.model.HabitProgress
+import com.example.myapplication.presentation.theme.SafetyOrange
 
 @Composable
 fun HabitCard(
@@ -48,7 +48,7 @@ fun HabitCard(
                 Text(
                     text = habit.streak,
                     style = MaterialTheme.typography.labelSmall,
-                    color = OrangeAccent,
+                    color = SafetyOrange,
                     fontSize = 10.sp
                 )
             }

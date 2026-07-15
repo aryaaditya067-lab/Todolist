@@ -4,6 +4,9 @@ import android.os.Bundle
 import android.widget.ImageButton
 import androidx.activity.viewModels
 
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
 class CalendarActivity : BaseActivity() {
 
     private val viewModel: TaskViewModel by viewModels()

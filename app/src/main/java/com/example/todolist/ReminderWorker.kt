@@ -8,23 +8,28 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.*
+import com.example.todolist.data.local.dao.TaskDao
+import com.example.todolist.data.mapper.toDomain
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import androidx.hilt.work.HiltWorker
 import java.util.concurrent.TimeUnit
 
-class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+@HiltWorker
+class ReminderWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted params: WorkerParameters,
+    private val taskDao: TaskDao
+) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
         val taskId = inputData.getInt("TASK_ID", -1)
         val taskTitle = inputData.getString("TASK_TITLE") ?: "Task Reminder"
         
-        // 1. Get database instance
-        val db = AppDatabase.getDatabase(applicationContext)
-        val task = db.taskDao().getTaskById(taskId) // You'll need to add this to TaskDao
+        val task = taskDao.getTaskById(taskId)?.toDomain()
 
-        // 2. Check if task exists and is NOT done
         if (task != null && !task.done) {
             showNotification(taskTitle, "Don't forget to complete your task!")
-            
-            // 3. Smart Repetition: If still incomplete, remind again in 1 hour
             scheduleNextReminder(taskId, taskTitle)
         }
 
@@ -47,7 +52,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
         )
 
         val notification = NotificationCompat.Builder(applicationContext, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // Use your app icon
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setContentText(message)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -60,7 +65,7 @@ class ReminderWorker(context: Context, params: WorkerParameters) : CoroutineWork
 
     private fun scheduleNextReminder(id: Int, title: String) {
         val nextWork = OneTimeWorkRequestBuilder<ReminderWorker>()
-            .setInitialDelay(1, TimeUnit.HOURS) // Repeat after 1 hour
+            .setInitialDelay(1, TimeUnit.HOURS)
             .setInputData(workDataOf("TASK_ID" to id, "TASK_TITLE" to title))
             .addTag("reminder_$id")
             .build()

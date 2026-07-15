@@ -13,12 +13,19 @@ import android.graphics.Paint
 import android.util.TypedValue
 import android.widget.RemoteViews
 import androidx.core.content.ContextCompat
+import com.example.todolist.data.local.dao.TaskDao
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.util.*
+import javax.inject.Inject
 
+@AndroidEntryPoint
 class HabitWidgetProvider : AppWidgetProvider() {
+
+    @Inject
+    lateinit var taskDao: TaskDao
 
     companion object {
         fun triggerUpdate(context: Context) {
@@ -53,9 +60,6 @@ class HabitWidgetProvider : AppWidgetProvider() {
 
         // Fetch data and update UI
         CoroutineScope(Dispatchers.IO).launch {
-            val db = AppDatabase.getDatabase(context)
-            val dao = db.taskDao()
-            
             val now = Calendar.getInstance()
             val todayDate = now.get(Calendar.DAY_OF_MONTH)
             val dayOfYear = now.get(Calendar.DAY_OF_YEAR)

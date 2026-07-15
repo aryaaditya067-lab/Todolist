@@ -14,8 +14,6 @@ class ReminderReceiver : BroadcastReceiver() {
         val taskId = intent.getIntExtra("TASK_ID", -1)
         val title = intent.getStringExtra("TASK_TITLE") ?: "Task"
         val action = intent.action
-
-        val repository = (context.applicationContext as? ApplicationController)?.repository
         
         when (action) {
             "DONE" -> {

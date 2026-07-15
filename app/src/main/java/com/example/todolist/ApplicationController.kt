@@ -1,14 +1,23 @@
 package com.example.todolist
 
 import android.app.Application
+import androidx.work.Configuration
+import dagger.hilt.android.HiltAndroidApp
+import javax.inject.Inject
+import androidx.hilt.work.HiltWorkerFactory
 
-class ApplicationController : Application() {
-    lateinit var repository: TaskRepository
-        private set
+@HiltAndroidApp
+class ApplicationController : Application(), Configuration.Provider {
+
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
 
     override fun onCreate() {
         super.onCreate()
-        val database = AppDatabase.getDatabase(this)
-        repository = TaskRepository(database.taskDao())
     }
 }

@@ -14,6 +14,7 @@ import android.view.animation.AnimationUtils
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.example.core.domain.model.*
 import com.example.todolist.databinding.RowTaskBinding
 
 class TaskAdapter(

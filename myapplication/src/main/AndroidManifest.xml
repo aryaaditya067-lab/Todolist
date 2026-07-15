@@ -10,6 +10,7 @@
     <uses-feature android:name="android.hardware.type.watch" />
 
     <application
+        android:name=".WearApplication"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
@@ -52,7 +53,7 @@
         </service>
 
         <service
-            android:name=".LifeProgressTileService"
+            android:name=".tile.TodoTileService"
             android:exported="true"
             android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
             <intent-filter>
@@ -61,6 +62,27 @@
             <meta-data
                 android:name="androidx.wear.tiles.PREVIEW"
                 android:resource="@drawable/ic_launcher_foreground" />
+        </service>
+
+        <service
+            android:name=".tile.TaskTileService"
+            android:exported="true"
+            android:label="My Tasks"
+            android:permission="com.google.android.wearable.permission.BIND_TILE_PROVIDER">
+            <intent-filter>
+                <action android:name="androidx.wear.tiles.action.BIND_TILE_PROVIDER" />
+            </intent-filter>
+            <meta-data
+                android:name="androidx.wear.tiles.PREVIEW"
+                android:resource="@drawable/ic_launcher_foreground" />
+        </service>
+
+        <service
+            android:name=".WearAuthSyncService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED" />
+            </intent-filter>
         </service>
 
     </application>

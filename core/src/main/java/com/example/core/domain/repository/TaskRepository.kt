@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.Flow
 
 interface TaskRepository {
     fun getTasksFlow(): Flow<Resource<List<Task>>>
-    suspend fun addTask(task: Task): Resource<Unit>
+    suspend fun addTask(task: Task): Resource<String>
     suspend fun updateTask(task: Task): Resource<Unit>
     suspend fun deleteTask(remoteId: String): Resource<Unit>
     suspend fun toggleTaskDone(remoteId: String, done: Boolean): Resource<Unit>

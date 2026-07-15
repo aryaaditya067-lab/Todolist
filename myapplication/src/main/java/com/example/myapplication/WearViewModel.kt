@@ -1,22 +1,25 @@
 package com.example.myapplication
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.core.domain.model.HabitProgress
+import com.example.core.domain.model.RepeatMode
+import com.example.core.domain.model.Task
+import com.example.core.domain.model.TaskCategory
+import com.example.core.domain.model.TaskPriority
+import com.example.core.domain.usecase.*
+import com.example.core.util.Resource
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 import java.util.Calendar
-
-data class HabitProgress(
-    val name: String,
-    val progress: Float,
-    val streak: String,
-)
+import javax.inject.Inject
 
 data class WearUiState(
     val tasks: List<Task> = emptyList(),
@@ -26,15 +29,20 @@ data class WearUiState(
     val greeting: String = "",
     val completedCount: Int = 0,
     val totalCount: Int = 0,
-    val aiRoast: String? = null,
-    val isRoasting: Boolean = false
+    val errorMessage: String? = null,
+    val isLoggedIn: Boolean = false,
+    val isPhoneAppInstalled: Boolean = true
 )
 
-class WearViewModel : ViewModel() {
-
-    private val firestore = FirebaseFirestore.getInstance()
-    private val auth = FirebaseAuth.getInstance()
-    private val repository = FirestoreRepository()
+@HiltViewModel
+class WearViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+    private val auth: FirebaseAuth,
+    private val getTasksUseCase: GetTasksUseCase,
+    private val addTaskUseCase: AddTaskUseCase,
+    private val toggleTaskUseCase: ToggleTaskUseCase,
+    private val deleteTaskUseCase: DeleteTaskUseCase
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WearUiState())
     val uiState: StateFlow<WearUiState> = _uiState.asStateFlow()
@@ -42,11 +50,20 @@ class WearViewModel : ViewModel() {
     init {
         updateUserInfo()
         startListening()
+        
+        auth.addAuthStateListener { 
+            updateUserInfo()
+            checkLoginStatus()
+        }
+    }
+
+    private fun checkLoginStatus() {
+        _uiState.update { it.copy(isLoggedIn = auth.currentUser != null) }
     }
 
     private fun updateUserInfo() {
         val user = auth.currentUser
-        val userName = user?.displayName?.split(" ")?.firstOrNull()?.uppercase() ?: "ADITYA"
+        val userName = user?.displayName?.split(" ")?.firstOrNull()?.uppercase() ?: "USER"
 
         val hour = Calendar.getInstance()[Calendar.HOUR_OF_DAY]
         val greeting = when (hour) {
@@ -57,20 +74,28 @@ class WearViewModel : ViewModel() {
             else -> "Good Night 🌙"
         }
         
-        _uiState.update { it.copy(userName = userName, greeting = greeting) }
+        _uiState.update { it.copy(userName = userName, greeting = greeting, isLoggedIn = user != null) }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun startListening() {
-        auth.addAuthStateListener { firebaseAuth ->
-            if (firebaseAuth.currentUser != null) {
-                viewModelScope.launch {
-                    getTasksFlow().collect { allTasks ->
-                        processData(allTasks)
+        viewModelScope.launch {
+            _uiState.map { it.isLoggedIn }
+                .distinctUntilChanged()
+                .flatMapLatest { isLoggedIn ->
+                    if (isLoggedIn) {
+                        getTasksUseCase()
+                    } else {
+                        flowOf(Resource.Success(emptyList()))
                     }
                 }
-            } else {
-                _uiState.update { it.copy(isLoading = false) }
-            }
+                .collect { resource ->
+                    when (resource) {
+                        is Resource.Loading -> _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+                        is Resource.Success -> processData(resource.data ?: emptyList())
+                        is Resource.Error -> _uiState.update { it.copy(isLoading = false, errorMessage = resource.message) }
+                    }
+                }
         }
     }
 
@@ -86,7 +111,6 @@ class WearViewModel : ViewModel() {
             )
             .toList()
 
-        // Efficient habit calculation
         val tasksByTitle = allTasks.groupBy { it.title }
         val habits = allTasks.asSequence()
             .filter { it.repeatMode != RepeatMode.ONE_TIME || it.parentId != 0 }
@@ -115,89 +139,55 @@ class WearViewModel : ViewModel() {
         }
     }
 
-    fun generateRoast() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isRoasting = true) }
-            try {
-                val state = _uiState.value
-                val allTasks = firestore.collection("users")
-                    .document(auth.currentUser?.uid ?: "")
-                    .collection("tasks")
-                    .get().await().documents.map { Task.fromMap(it.id, it.data ?: emptyMap()) }
-
-                val completed = state.completedCount
-                val total = state.totalCount
-                val recurring = allTasks.filter { it.repeatMode != RepeatMode.ONE_TIME || it.parentId != 0 }
-                val missedHabits = recurring.count { !it.done && it.date < getTodayTimestamp() }
-                val streak = calculateStreak(allTasks)
-
-                val roast = GroqApiService.getRoast(completed, total, missedHabits, streak)
-                _uiState.update { it.copy(aiRoast = roast, isRoasting = false) }
-            } catch (e: Exception) {
-                _uiState.update { it.copy(aiRoast = "AI can't roast you now. 😴", isRoasting = false) }
-            }
-        }
-    }
-
-    private fun calculateStreak(tasks: List<Task>): Int {
-        if (tasks.isEmpty()) return 0
-        val sortedDates = tasks.filter { it.done }.map { it.date }.distinct().sortedDescending()
-        if (sortedDates.isEmpty()) return 0
-        var streak = 0
-        var current = getTodayTimestamp()
-        for (date in sortedDates) {
-            if (date == current || date == current - 86400000) {
-                streak++
-                current = date
-            } else if (date < current - 86400000) {
-                break
-            }
-        }
-        return streak
-    }
-
-    private fun getTasksFlow(): Flow<List<Task>> = callbackFlow {
-        val uid = auth.currentUser?.uid ?: return@callbackFlow
-        val listener = firestore.collection("users").document(uid).collection("tasks")
-            .addSnapshotListener { snapshot, error ->
-                if (error != null) return@addSnapshotListener
-                val tasksList = snapshot?.documents?.map { doc ->
-                    Task.fromMap(doc.id, doc.data ?: emptyMap())
-                } ?: emptyList()
-                trySend(tasksList)
-            }
-        awaitClose { listener.remove() }
-    }
-
     fun toggleTask(task: Task) {
         viewModelScope.launch {
-            try {
-                repository.toggleTaskDone(task.remoteId, !task.done)
-            } catch (_: Exception) {}
+            toggleTaskUseCase(task.remoteId, !task.done)
         }
     }
 
     fun deleteTask(task: Task) {
         viewModelScope.launch {
-            try {
-                repository.deleteTask(task.remoteId)
-            } catch (_: Exception) {}
+            deleteTaskUseCase(task.remoteId)
         }
     }
 
     fun addVoiceTask(title: String) {
-        val uid = auth.currentUser?.uid ?: return
-        val today = getTodayTimestamp()
-        val newTask = Task(
-            title = title,
-            date = today,
-            category = TaskCategory.PERSONAL,
-            priority = TaskPriority.MEDIUM
-        )
         viewModelScope.launch {
-            firestore.collection("users").document(uid).collection("tasks")
-                .add(newTask.toMap())
+            val today = getTodayTimestamp()
+            val tempId = "temp_${System.currentTimeMillis()}"
+            val initialTask = Task(
+                remoteId = tempId,
+                title = title,
+                date = today,
+                category = TaskCategory.PERSONAL,
+                priority = TaskPriority.MEDIUM
+            )
+            addTaskUseCase(initialTask)
+
+            try {
+                val (parsedTitle, priorityStr) = GroqApiService.parseTaskDetails(title)
+                val priority = try {
+                    TaskPriority.valueOf(priorityStr)
+                } catch (e: Exception) {
+                    TaskPriority.MEDIUM
+                }
+                
+                if (parsedTitle != title || priority != TaskPriority.MEDIUM) {
+                    deleteTaskUseCase(tempId)
+                    val smartTask = Task(
+                        title = parsedTitle,
+                        date = today,
+                        category = TaskCategory.PERSONAL,
+                        priority = priority
+                    )
+                    addTaskUseCase(smartTask)
+                }
+            } catch (e: Exception) {}
         }
+    }
+
+    fun setPhoneAppInstalled(installed: Boolean) {
+        _uiState.update { it.copy(isPhoneAppInstalled = installed) }
     }
 
     private fun getTodayTimestamp(): Long {

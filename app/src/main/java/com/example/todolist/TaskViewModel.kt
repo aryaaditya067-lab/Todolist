@@ -4,75 +4,82 @@ import android.app.Application
 import android.content.Intent
 import android.util.Log
 import androidx.lifecycle.*
+import com.example.core.domain.model.*
+import com.example.core.domain.usecase.*
+import com.example.core.util.Resource
+import com.example.todolist.data.repository.LocalTaskRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
+import java.text.SimpleDateFormat
 import java.util.*
+import javax.inject.Inject
 
-class TaskViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository: TaskRepository
-    private val firestoreRepository = FirestoreRepository()
+@HiltViewModel
+class TaskViewModel @Inject constructor(
+    application: Application,
+    private val localRepository: LocalTaskRepository,
+    private val getTasksUseCase: GetTasksUseCase,
+    private val addTaskUseCase: AddTaskUseCase,
+    private val updateTaskUseCase: UpdateTaskUseCase,
+    private val deleteTaskUseCase: DeleteTaskUseCase,
+    private val toggleTaskUseCase: ToggleTaskUseCase
+) : AndroidViewModel(application) {
+
     private val reminderManager = ReminderManager(application)
     private val calendarSyncManager = CalendarSyncManager(application)
     private val settingsManager = SettingsManager(application)
-    val allTasks: LiveData<List<Task>>
-    private val context = application.applicationContext
+    
+    val allTasks: LiveData<List<Task>> = localRepository.allTasks
+    private val context: android.content.Context = application.applicationContext
 
     private var timerJob: Job? = null
     
-    // AI Roast State
     private val _aiRoast = MutableLiveData<String?>(null)
     val aiRoast: LiveData<String?> = _aiRoast
 
     private val _isRoasting = MutableLiveData<Boolean>(false)
     val isRoasting: LiveData<Boolean> = _isRoasting
     
-    companion object {
-        private var isInitialCloudFetchDone = false
-    }
-    
     init {
-        val taskDao = AppDatabase.getDatabase(application).taskDao()
-        repository = TaskRepository(taskDao)
-        allTasks = repository.allTasks
         startTicker()
-        
-        if (!isInitialCloudFetchDone) {
-            fetchFromCloud()
-            isInitialCloudFetchDone = true
-        }
+        fetchFromCloud()
         syncWithSystemCalendar()
     }
 
-    fun syncWithSystemCalendar() = viewModelScope.launch(Dispatchers.IO) {
+    fun syncWithSystemCalendar(): Job = viewModelScope.launch(Dispatchers.IO) {
         if (settingsManager.calendarSyncEnabled && calendarSyncManager.hasPermissions()) {
             val systemTasks = calendarSyncManager.fetchCalendarEvents()
             systemTasks.forEach { systemTask ->
-                val exists = repository.getTaskByTitleAndDate(systemTask.title, systemTask.date)
+                val exists = localRepository.getTaskByTitleAndDate(systemTask.title, systemTask.date)
                 if (exists == null) {
-                    repository.insert(systemTask)
+                    insert(systemTask)
                 }
             }
         }
     }
 
-    private fun fetchFromCloud() = viewModelScope.launch(Dispatchers.IO) {
-        try {
-            val remoteTasks = firestoreRepository.fetchTasks()
-            remoteTasks.forEach { remoteTask ->
-                if (remoteTask.remoteId.isNotEmpty()) {
-                    val exists = repository.existsWithRemoteId(remoteTask.remoteId)
-                    if (!exists) {
-                        val localMatch = repository.getTaskByTitleAndDate(remoteTask.title, remoteTask.date)
-                        if (localMatch == null) {
-                            val id = repository.insert(remoteTask).toInt()
-                            reminderManager.scheduleReminder(remoteTask.copy(id = id))
-                        } else if (localMatch.remoteId.isEmpty()) {
-                            repository.update(localMatch.copy(remoteId = remoteTask.remoteId))
+    private fun fetchFromCloud(): Job = viewModelScope.launch {
+        getTasksUseCase().collectLatest { resource ->
+            if (resource is Resource.Success) {
+                val remoteTasks = resource.data ?: emptyList()
+                withContext(Dispatchers.IO) {
+                    remoteTasks.forEach { remoteTask ->
+                        if (remoteTask.remoteId.isNotEmpty()) {
+                            val exists = localRepository.existsWithRemoteId(remoteTask.remoteId)
+                            if (!exists) {
+                                val localMatch = localRepository.getTaskByTitleAndDate(remoteTask.title, remoteTask.date)
+                                if (localMatch == null) {
+                                    val id = localRepository.insert(remoteTask).toInt()
+                                    reminderManager.scheduleReminder(remoteTask.copy(id = id))
+                                } else if (localMatch.remoteId.isEmpty()) {
+                                    localRepository.update(localMatch.copy(remoteId = remoteTask.remoteId))
+                                }
+                            }
                         }
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.e("TaskViewModel", "Cloud fetch failed", e)
         }
     }
 
@@ -85,20 +92,18 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun syncToCloudSynchronous(task: Task) {
-        try {
-            val remoteId = firestoreRepository.syncTask(task)
-            if (task.remoteId != remoteId) {
-                repository.update(task.copy(remoteId = remoteId))
+    private fun updateTaskInternal(task: Task): Job = viewModelScope.launch(Dispatchers.IO) {
+        localRepository.update(task)
+        // Sync to cloud
+        if (task.remoteId.isNotEmpty()) {
+            updateTaskUseCase(task)
+        } else {
+            val resource = addTaskUseCase(task)
+            if (resource is Resource.Success) {
+                localRepository.update(task.copy(remoteId = resource.data ?: ""))
             }
-        } catch (e: Exception) {
-            Log.e("TaskViewModel", "Sync failed", e)
         }
-    }
-
-    private fun updateTaskInternal(task: Task) = viewModelScope.launch(Dispatchers.IO) {
-        repository.update(task)
-        syncToCloudSynchronous(task)
+        
         if (task.done) {
             reminderManager.cancelReminder(task.id)
         } else {
@@ -106,12 +111,12 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun ensureRecurringTasksForToday() = viewModelScope.launch(Dispatchers.IO) {
+    fun ensureRecurringTasksForToday(): Job = viewModelScope.launch(Dispatchers.IO) {
         val today = getTodayTimestamp()
         val calendar = Calendar.getInstance()
         val dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK)
         
-        val templates = repository.getRecurringTemplates()
+        val templates = localRepository.getRecurringTemplates()
         for (template in templates) {
             val shouldAppearToday = when (template.repeatMode) {
                 RepeatMode.DAILY -> true
@@ -121,8 +126,8 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (shouldAppearToday) {
-                val existingInstance = repository.getInstanceForTemplate(template.id, today)
-                val duplicateCheck = repository.getTaskByTitleAndDate(template.title, today)
+                val existingInstance = localRepository.getInstanceForTemplate(template.id, today)
+                val duplicateCheck = localRepository.getTaskByTitleAndDate(template.title, today)
                 
                 if (existingInstance == null && duplicateCheck == null) {
                     val newInstance = template.copy(
@@ -136,20 +141,17 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
                         timerStatus = TimerStatus.NOT_STARTED,
                         timerSeconds = template.targetSeconds
                     )
-                    val newId = repository.insert(newInstance).toInt()
-                    val taskWithId = newInstance.copy(id = newId)
-                    syncToCloudSynchronous(taskWithId)
-                    reminderManager.scheduleReminder(taskWithId)
+                    insert(newInstance)
                 }
             }
         }
     }
 
-    fun startTimer(task: Task, @Suppress("UNUSED_PARAMETER") onlyOneRunning: Boolean = true) = viewModelScope.launch {
+    fun startTimer(task: Task): Job = viewModelScope.launch {
         if (task.done || task.timerType == TimerType.NONE) return@launch
         
         allTasks.value?.filter { it.timerStatus == TimerStatus.RUNNING && it.id != task.id }?.forEach {
-            repository.update(it.copy(timerStatus = TimerStatus.PAUSED))
+            localRepository.update(it.copy(timerStatus = TimerStatus.PAUSED))
         }
         
         val updated = task.copy(timerStatus = TimerStatus.RUNNING)
@@ -162,7 +164,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         context.startService(serviceIntent)
     }
 
-    fun pauseTimer(task: Task) = viewModelScope.launch {
+    fun pauseTimer(task: Task): Job = viewModelScope.launch {
         val updated = task.copy(timerStatus = TimerStatus.PAUSED)
         updateTaskInternal(updated)
         
@@ -172,7 +174,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         context.startService(serviceIntent)
     }
 
-    fun stopTimer(task: Task) = viewModelScope.launch {
+    fun stopTimer(task: Task): Job = viewModelScope.launch {
         val updated = task.copy(
             timerStatus = TimerStatus.NOT_STARTED,
             timerSeconds = task.targetSeconds
@@ -185,7 +187,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         context.startService(serviceIntent)
     }
 
-    fun toggleTaskDone(task: Task) = viewModelScope.launch {
+    fun toggleTaskDone(task: Task): Job = viewModelScope.launch {
         val newDone = !task.done
         var updatedTask = task.copy(done = newDone)
         
@@ -205,16 +207,23 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             context.startService(serviceIntent)
         }
         updateTaskInternal(updatedTask)
+        toggleTaskUseCase(task.remoteId, newDone)
     }
 
-    fun insert(task: Task) = viewModelScope.launch(Dispatchers.IO) {
-        val id = repository.insert(task).toInt()
-        val updated = task.copy(id = id)
-        syncToCloudSynchronous(updated)
-        reminderManager.scheduleReminder(updated)
+    fun insert(task: Task): Job = viewModelScope.launch(Dispatchers.IO) {
+        val id = localRepository.insert(task).toInt()
+        val updatedLocal = task.copy(id = id)
+        
+        // Sync to cloud
+        val resource = addTaskUseCase(updatedLocal)
+        if (resource is Resource.Success) {
+            localRepository.update(updatedLocal.copy(remoteId = resource.data ?: ""))
+        }
+        
+        reminderManager.scheduleReminder(updatedLocal)
         
         if (settingsManager.calendarSyncEnabled) {
-            calendarSyncManager.syncTaskToCalendar(updated)
+            calendarSyncManager.syncTaskToCalendar(updatedLocal)
         }
 
         if (task.isRecurringTemplate) {
@@ -222,105 +231,60 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun delete(task: Task) = viewModelScope.launch(Dispatchers.IO) {
+    fun delete(task: Task): Job = viewModelScope.launch(Dispatchers.IO) {
         deleteMultipleTasks(listOf(task))
     }
 
-    fun deleteMultipleTasks(tasks: List<Task>) = viewModelScope.launch(Dispatchers.IO) {
+    fun deleteMultipleTasks(tasks: List<Task>): Job = viewModelScope.launch(Dispatchers.IO) {
         if (tasks.isEmpty()) return@launch
         
-        val ridsToDelete = mutableSetOf<String>()
-        val tasksToDeleteLocally = mutableSetOf<Task>()
-        val templates = repository.getRecurringTemplates()
-        val taskDao = AppDatabase.getDatabase(context).taskDao()
-
-        // 1. Bhai saari IDs ek saath collect karo (Phone + Cloud)
+        localRepository.deleteMultiple(tasks)
         tasks.forEach { task ->
-            tasksToDeleteLocally.add(task)
-            if (task.remoteId.isNotEmpty()) ridsToDelete.add(task.remoteId)
-
-            // Recurring template chain deletion taaki restart pe wapas na aaye
-            if (task.parentId != 0) {
-                templates.find { it.id == task.parentId }?.let { template ->
-                    tasksToDeleteLocally.add(template)
-                    if (template.remoteId.isNotEmpty()) ridsToDelete.add(template.remoteId)
-                    // Bachon ki remote IDs bhi le lo
-                    val instanceRids = taskDao.getRemoteIdsOfInstances(template.id)
-                    ridsToDelete.addAll(instanceRids)
-                }
-            }
-            if (task.isRecurringTemplate) {
-                val instanceRids = taskDao.getRemoteIdsOfInstances(task.id)
-                ridsToDelete.addAll(instanceRids)
-            }
-        }
-
-        // --- STEP 1: PHONE KI SAFAI EK JHATKE MEIN ---
-        // repository.deleteMultiple use karenge taaki UI ek saath update ho
-        repository.deleteMultiple(tasksToDeleteLocally.toList())
-        tasksToDeleteLocally.forEach { reminderManager.cancelReminder(it.id) }
-        Log.d("TaskViewModel", "Local batch delete finished instantly")
-
-        // --- STEP 2: BADAL (CLOUD) KI SAFAI PARALLEL MEIN ---
-        ridsToDelete.forEach { rid ->
-            launch {
-                try {
-                    firestoreRepository.deleteTask(rid)
-                } catch (e: Exception) {
-                    Log.e("TaskViewModel", "Cloud multi-delete error for $rid", e)
-                }
+            reminderManager.cancelReminder(task.id)
+            if (task.remoteId.isNotEmpty()) {
+                deleteTaskUseCase(task.remoteId)
             }
         }
     }
 
-    fun stopRepeatingTask(task: Task) = viewModelScope.launch(Dispatchers.IO) {
+    fun stopRepeatingTask(task: Task): Job = viewModelScope.launch(Dispatchers.IO) {
         val pid = if (task.isRecurringTemplate) task.id else task.parentId
         if (pid != 0) {
-            val template = repository.getRecurringTemplates().find { it.id == pid }
-            if (template != null) {
+            val templates = localRepository.getRecurringTemplates()
+            templates.find { it.id == pid }?.let { template ->
                 if (template.remoteId.isNotEmpty()) {
-                    try { firestoreRepository.deleteTask(template.remoteId) } catch (e: Exception) {}
+                    deleteTaskUseCase(template.remoteId)
                 }
-                repository.delete(template)
+                localRepository.delete(template)
                 
                 val currentTask = if (task.isRecurringTemplate) null else task
                 currentTask?.let {
                     val updated = it.copy(parentId = 0, parentRemoteId = "", repeatMode = RepeatMode.ONE_TIME)
-                    repository.update(updated)
-                    syncToCloudSynchronous(updated)
+                    localRepository.update(updated)
+                    // Sync update
+                    if (updated.remoteId.isNotEmpty()) {
+                        updateTaskUseCase(updated)
+                    }
                 }
             }
         }
     }
 
-    fun addSuggestionAsSubTask(suggestion: String, parentTask: Task) {
-        val subTask = Task(
-            title = suggestion,
-            date = parentTask.date,
-            category = parentTask.category,
-            priority = parentTask.priority,
-            parentId = parentTask.id,
-            parentRemoteId = parentTask.remoteId,
-            startTime = parentTask.startTime,
-            endTime = parentTask.endTime
-        )
-        insert(subTask)
-    }
-
     fun getTasksForMonth(): LiveData<List<Task>> {
-        val today = getTodayTimestamp()
-        val calendar = Calendar.getInstance()
-        calendar.timeInMillis = today
-        calendar.set(Calendar.DAY_OF_MONTH, 1)
-        val startOfMonth = calendar.timeInMillis
+        val todayTimestamp: Long = getTodayTimestamp()
+        val cal: Calendar = Calendar.getInstance()
+        cal.timeInMillis = todayTimestamp
+        cal.set(Calendar.DAY_OF_MONTH, 1)
+        val start: Long = cal.timeInMillis
 
-        calendar.set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
-        calendar.set(Calendar.HOUR_OF_DAY, 23)
-        calendar.set(Calendar.MINUTE, 59)
-        calendar.set(Calendar.SECOND, 59)
-        val endOfMonth = calendar.timeInMillis
+        cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
+        cal.set(Calendar.HOUR_OF_DAY, 23)
+        cal.set(Calendar.MINUTE, 59)
+        cal.set(Calendar.SECOND, 59)
+        val end: Long = cal.timeInMillis
 
-        return repository.getTasksForMonth(startOfMonth, endOfMonth)
+        val result: LiveData<List<Task>> = localRepository.getTasksForMonth(start, end)
+        return result
     }
 
     fun generateRoast() {
@@ -329,14 +293,13 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val today = getTodayTimestamp()
                 val tomorrow = today + 86400000
-                val tasksForToday = repository.getTasksForDateRange(today, tomorrow)
+                val tasksForToday = localRepository.getTasksForDateRange(today, tomorrow)
                 val completed = tasksForToday.count { it.done }
                 val total = tasksForToday.size
                 
-                // For simplicity, using task-based streak logic or basic habit count
                 val allTasksList = allTasks.value ?: emptyList()
                 val recurring = allTasksList.filter { it.repeatMode != RepeatMode.ONE_TIME || it.parentId != 0 }
-                val missedHabits = recurring.count { !it.done && it.date < today } // Simplified missed logic
+                val missedHabits = recurring.count { !it.done && it.date < today }
                 val streak = calculateStreak(allTasksList)
 
                 val roast = GroqApiService.getRoast(completed, total, missedHabits, streak)
@@ -351,11 +314,11 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun calculateStreak(tasks: List<Task>): Int {
         if (tasks.isEmpty()) return 0
-        val sortedDates = tasks.filter { it.done }.map { it.date }.distinct().sortedDescending()
+        val sortedDates: List<Long> = tasks.filter { it.done }.map { it.date }.distinct().sortedDescending()
         if (sortedDates.isEmpty()) return 0
         
-        var streak = 0
-        var current = getTodayTimestamp()
+        var streak: Int = 0
+        var current: Long = getTodayTimestamp()
         
         for (date in sortedDates) {
             if (date == current || date == current - 86400000) {

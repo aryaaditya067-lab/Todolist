@@ -1,5 +1,6 @@
 package com.example.todolist
 
+import com.example.core.domain.model.*
 import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween

@@ -12,6 +12,9 @@ import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
 
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
 class SettingsActivity : BaseActivity() {
 
     private lateinit var auth: FirebaseAuth

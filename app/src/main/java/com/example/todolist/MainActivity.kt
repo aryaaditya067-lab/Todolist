@@ -13,14 +13,17 @@ import com.example.todolist.databinding.ActivityMainBinding
 import com.example.todolist.databinding.BottomSheetAddTaskBinding
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import com.google.firebase.auth.FirebaseAuth
+import com.example.core.domain.model.*
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.work.*
-import java.util.concurrent.TimeUnit
 
+@AndroidEntryPoint
 class MainActivity : BaseActivity() {
 
     private lateinit var binding: ActivityMainBinding
@@ -28,15 +31,18 @@ class MainActivity : BaseActivity() {
     private lateinit var adapter: TaskAdapter
     private lateinit var auth: FirebaseAuth
 
+    @Inject
+    lateinit var wearManager: WearCommunicationManager
+
     // AI Suggestion ke liye job
     private var aiSuggestionJob: Job? = null
 
     // Fix 2: TimerState data class — switch aur state sync rahega
     private data class TimerState(var type: TimerType = TimerType.NONE, var seconds: Int = 0)
 
-    // Fix 1: Word boundary check — "display" ko "gaming" detect nahi karega
+    // Fix 1: Word boundary check — uses startsWith for stemming support
     private fun String.containsWord(word: String): Boolean {
-        return this.split(Regex("[\\s,\\.!\\?]+")).any { it == word }
+        return this.split(Regex("[\\s,\\.!\\?:;\\-/]+")).any { it.startsWith(word, ignoreCase = true) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,6 +56,9 @@ class MainActivity : BaseActivity() {
             finish()
             return
         }
+
+        wearManager.sendAuthStatus()
+        handleIntent(intent)
 
         adapter = TaskAdapter(
             onTaskToggled = { viewModel.toggleTaskDone(it) },
@@ -69,17 +78,6 @@ class MainActivity : BaseActivity() {
         binding.btnSettings.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
-
-        viewModel.aiRoast.observe(this) { roast ->
-            binding.txtAiRoast.text = roast
-            binding.cardAiRoast.visibility = if (roast.isNullOrEmpty()) View.GONE else View.VISIBLE
-        }
-
-        viewModel.isRoasting.observe(this) { isRoasting ->
-            binding.progressRoast.visibility = if (isRoasting) View.VISIBLE else View.GONE
-        }
-
-        schedulePeriodicRoast()
 
         binding.btnEnterSelection.setOnClickListener {
             adapter.enterSelectionModeWithoutTask()
@@ -115,16 +113,24 @@ class MainActivity : BaseActivity() {
         observeViewModel()
     }
 
-    private fun schedulePeriodicRoast() {
-        val roastWorkRequest = PeriodicWorkRequestBuilder<RoastWorker>(4, TimeUnit.HOURS)
-            .addTag("periodic_roast")
-            .build()
+    override fun onResume() {
+        super.onResume()
+        // Har baar app foreground aaye, watch ko auth bhejo
+        wearManager.sendAuthStatus()
+        updateUserHeader()
+    }
 
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "periodic_roast",
-            ExistingPeriodicWorkPolicy.KEEP,
-            roastWorkRequest
-        )
+    private fun updateUserHeader() {
+        // User Header Update
+        val userName = auth.currentUser?.displayName?.split(" ")?.get(0) ?: "User"
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val greeting = when (hour) {
+            in 0..11 -> "Good Morning"
+            in 12..16 -> "Good Afternoon"
+            else -> "Good Evening"
+        }
+        binding.txtGreeting.text = "$greeting, $userName ✨"
+        binding.txtDate.text = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
     }
 
     private fun handleTaskClick(task: Task) {
@@ -165,28 +171,15 @@ class MainActivity : BaseActivity() {
 
     private fun observeViewModel() {
         viewModel.allTasks.observe(this) { tasks ->
-            adapter.submitList(tasks)
-            binding.txtEmptyState.visibility = if (tasks.isEmpty()) View.VISIBLE else View.GONE
-
-            // Habit Tracker Update (Today only)
-            val today = getTodayTimestamp()
-            val todayTasks = tasks.filter { it.date == today && !it.isRecurringTemplate }
-            
-            // User Header Update
-            val userName = auth.currentUser?.displayName?.split(" ")?.get(0) ?: "User"
-            val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-            val greeting = when (hour) {
-                in 0..11 -> "Good Morning"
-                in 12..16 -> "Good Afternoon"
-                else -> "Good Evening"
-            }
-            binding.txtGreeting.text = "$greeting, $userName ✨"
-            binding.txtDate.text = SimpleDateFormat("EEEE, MMMM d", Locale.getDefault()).format(Date())
-
             // Bug Fix 1: Filter out duplicate task IDs (Phone + Cloud sync)
+            val distinctTasks = tasks.distinctBy { it.id }
+            adapter.submitList(distinctTasks)
+            binding.txtEmptyState.visibility = if (distinctTasks.isEmpty()) View.VISIBLE else View.GONE
+
+            // Log duplicates for debugging
             val grouped = tasks.groupBy { it.id }
-            grouped.filter { it.value.size > 1 }.forEach { (key, dupes) ->
-                Log.e("MainActivity", "Duplicate tasks found: key=$key, count=${dupes.size}, ids=${dupes.map { it.id }}")
+            grouped.filter { it.value.size > 1 }.forEach { (id, dupes) ->
+                Log.e("MainActivity", "Duplicate tasks found for ID: $id (count: ${dupes.size})")
             }
         }
 
@@ -207,23 +200,37 @@ class MainActivity : BaseActivity() {
 
         val timerState = TimerState()
         var selectedCategory = TaskCategory.PERSONAL
+        var selectedPriority = TaskPriority.MEDIUM
 
         // AI Suggestion Logic (Triggers as you type with delay)
         dialogBinding.editTaskTitle.doAfterTextChanged { text ->
             val title = text?.toString()?.trim() ?: ""
             if (title.isNotEmpty()) {
-                // Category Keyword Suggestion
+                val lowerTitle = title.lowercase()
+                
+                // Priority Keyword Suggestion
+                selectedPriority = when {
+                    lowerTitle.containsWord("urgent") || lowerTitle.containsWord("asap") || lowerTitle.containsWord("important") -> TaskPriority.HIGH
+                    lowerTitle.containsWord("later") || lowerTitle.containsWord("low") -> TaskPriority.LOW
+                    else -> TaskPriority.MEDIUM
+                }
+                
+                // Priority UI feedback
+                dialogBinding.txtPrioritySuggestion.visibility = if (selectedPriority != TaskPriority.MEDIUM) View.VISIBLE else View.GONE
+                dialogBinding.txtPrioritySuggestion.text = "Priority: ${selectedPriority.name} ⚡"
+
+                // Category Keyword Suggestion using containsWord fix
                 val suggestedCategory = when {
-                    title.contains("work", true) || title.contains("meeting", true) -> TaskCategory.WORK
-                    title.contains("study", true) || title.contains("exam", true) || title.contains("read", true) -> TaskCategory.STUDY
-                    title.contains("gym", true) || title.contains("workout", true) || title.contains("fit", true) -> TaskCategory.FITNESS
-                    title.contains("code", true) || title.contains("dev", true) || title.contains("bug", true) -> TaskCategory.CODING
-                    title.contains("game", true) || title.contains("play", true) -> TaskCategory.GAMING
+                    lowerTitle.containsWord("work") || lowerTitle.containsWord("meeting") -> TaskCategory.WORK
+                    lowerTitle.containsWord("study") || lowerTitle.containsWord("exam") || lowerTitle.containsWord("read") -> TaskCategory.STUDY
+                    lowerTitle.containsWord("gym") || lowerTitle.containsWord("workout") || lowerTitle.containsWord("fit") -> TaskCategory.FITNESS
+                    lowerTitle.containsWord("code") || lowerTitle.containsWord("dev") || lowerTitle.containsWord("bug") -> TaskCategory.CODING
+                    lowerTitle.containsWord("game") || lowerTitle.containsWord("play") -> TaskCategory.GAMING
                     else -> null
                 }
                 
+                selectedCategory = suggestedCategory ?: TaskCategory.PERSONAL
                 if (suggestedCategory != null) {
-                    selectedCategory = suggestedCategory
                     dialogBinding.txtCategorySuggestion.visibility = View.VISIBLE
                     dialogBinding.txtCategorySuggestion.text = "Suggesting: ${suggestedCategory.name} ✨"
                 } else {
@@ -231,18 +238,27 @@ class MainActivity : BaseActivity() {
                 }
 
                 aiSuggestionJob?.cancel()
-                aiSuggestionJob = lifecycleScope.launch {
-                    delay(700) // Snapier delay
-                    dialogBinding.progressAiSuggestion.visibility = View.VISIBLE
-                    val suggestion = GroqApiService.getTaskSuggestion(title)
-                    dialogBinding.progressAiSuggestion.visibility = View.GONE
-                    
-                    if (suggestion.isNotEmpty()) {
-                        dialogBinding.cardAiSuggestion.visibility = View.VISIBLE
-                        dialogBinding.txtAiSuggestion.text = suggestion
+                if (title.length >= 8) { // Optimization: Only call AI for meaningful length
+                    aiSuggestionJob = lifecycleScope.launch {
+                        delay(700) // Debounce delay
+                        try {
+                            dialogBinding.progressAiSuggestion.visibility = View.VISIBLE
+                            val suggestion = GroqApiService.getTaskSuggestion(title)
+                            if (suggestion.isNotEmpty()) {
+                                dialogBinding.cardAiSuggestion.visibility = View.VISIBLE
+                                dialogBinding.txtAiSuggestion.text = suggestion
+                            }
+                        } finally {
+                            dialogBinding.progressAiSuggestion.visibility = View.GONE
+                        }
                     }
+                } else {
+                    dialogBinding.cardAiSuggestion.visibility = View.GONE
                 }
             } else {
+                selectedCategory = TaskCategory.PERSONAL // Fix: Reset category
+                selectedPriority = TaskPriority.MEDIUM
+                dialogBinding.txtPrioritySuggestion.visibility = View.GONE
                 dialogBinding.txtCategorySuggestion.visibility = View.GONE
                 dialogBinding.cardAiSuggestion.visibility = View.GONE
             }
@@ -256,15 +272,10 @@ class MainActivity : BaseActivity() {
             dialogBinding.cardAiSuggestion.visibility = View.GONE
         }
 
-        // Priority Selection - Defaulting to MEDIUM as it's not in this version of layout
-        val selectedPriority = TaskPriority.MEDIUM
-
         // Timer Switch Logic
         dialogBinding.switchTimer.setOnCheckedChangeListener { _, isChecked ->
             dialogBinding.layoutDurationPicker.visibility = if (isChecked) View.VISIBLE else View.GONE
-            if (isChecked && timerState.type == TimerType.NONE) {
-                timerState.type = TimerType.COUNTDOWN
-            }
+            timerState.type = if (isChecked) TimerType.COUNTDOWN else TimerType.NONE
         }
 
         dialogBinding.btnCreateTask.setOnClickListener {
@@ -288,9 +299,9 @@ class MainActivity : BaseActivity() {
                 date = getTodayTimestamp(),
                 category = selectedCategory,
                 priority = selectedPriority,
-                timerType = if (dialogBinding.switchTimer.isChecked) TimerType.COUNTDOWN else TimerType.NONE,
-                targetSeconds = seconds,
-                timerSeconds = seconds,
+                timerType = timerState.type, // Use sync state
+                targetSeconds = timerState.seconds, // Use sync state
+                timerSeconds = timerState.seconds,
                 repeatMode = repeatMode,
                 notes = notes,
                 isRecurringTemplate = repeatMode != RepeatMode.ONE_TIME,
@@ -301,7 +312,29 @@ class MainActivity : BaseActivity() {
             dialog.dismiss()
         }
 
+        // Fix: Cancel AI job when dialog is dismissed
+        dialog.setOnDismissListener { 
+            aiSuggestionJob?.cancel()
+        }
+
         dialog.show()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent?) {
+        if (intent?.action == Intent.ACTION_VIEW && intent.data?.scheme == "todolist") {
+            lifecycleScope.launch {
+                repeat(3) { // Send 3 times with a delay to ensure watch is listening
+                    wearManager.sendAuthStatus()
+                    delay(1000)
+                }
+            }
+            Log.d("MainActivity", "Deep link received: sending auth status to watch")
+        }
     }
 
     private fun getTodayTimestamp(): Long {

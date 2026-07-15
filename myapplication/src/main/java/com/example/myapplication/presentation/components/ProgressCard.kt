@@ -10,7 +10,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.MaterialTheme
 import androidx.wear.compose.material3.Text
-import com.example.myapplication.presentation.theme.OrangeAccent
+import com.example.myapplication.presentation.theme.SafetyOrange
 
 @Composable
 fun ProgressCard(
@@ -38,7 +38,7 @@ fun ProgressCard(
         Text(
             text = statsText,
             style = MaterialTheme.typography.labelSmall,
-            color = OrangeAccent,
+            color = SafetyOrange,
             fontWeight = FontWeight.Bold
         )
     }

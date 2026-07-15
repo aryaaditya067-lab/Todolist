@@ -5,7 +5,9 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.parcelize)
+    alias(libs.plugins.kotlin.symbol.processing)
     alias(libs.plugins.google.services)
+    alias(libs.plugins.hilt)
 }
 
 val localProperties = Properties()
@@ -34,7 +36,7 @@ android {
 
     buildTypes {
         debug {
-            isDebuggable = false
+            isDebuggable = true
         }
         release {
             isMinifyEnabled = false
@@ -42,6 +44,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -58,6 +61,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation("androidx.wear.tiles:tiles:1.4.1")
     implementation("androidx.wear.tiles:tiles-material:1.4.1")
     implementation("com.google.android.horologist:horologist-tiles:0.6.17")
@@ -88,12 +92,19 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
 
+    // Hilt
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+
     // Watch Face Complications
     implementation("androidx.wear.watchface:watchface-complications-data-source-ktx:1.3.0")
     
     // Ongoing Activity
     implementation("androidx.wear:wear-ongoing:1.1.0")
     implementation("androidx.wear:wear:1.4.0")
+    implementation("androidx.wear:wear-remote-interactions:1.2.0")
+    implementation("androidx.localbroadcastmanager:localbroadcastmanager:1.1.0")
 
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)

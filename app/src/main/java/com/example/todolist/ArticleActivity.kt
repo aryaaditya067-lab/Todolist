@@ -5,6 +5,9 @@ import android.widget.Button
 import android.widget.ImageButton
 import android.widget.TextView
 
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
 class ArticleActivity : BaseActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {

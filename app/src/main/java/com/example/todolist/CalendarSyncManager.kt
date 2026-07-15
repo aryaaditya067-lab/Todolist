@@ -7,6 +7,7 @@ import android.database.Cursor
 import android.net.Uri
 import android.provider.CalendarContract
 import androidx.core.content.ContextCompat
+import com.example.core.domain.model.*
 import java.util.*
 
 class CalendarSyncManager(private val context: Context) {

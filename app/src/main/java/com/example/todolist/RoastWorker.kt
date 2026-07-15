@@ -8,13 +8,21 @@ import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.work.*
+import com.example.todolist.data.local.dao.TaskDao
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import androidx.hilt.work.HiltWorker
 import java.util.Calendar
 
-class RoastWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+@HiltWorker
+class RoastWorker @AssistedInject constructor(
+    @Assisted context: Context,
+    @Assisted params: WorkerParameters,
+    private val taskDao: TaskDao
+) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
         try {
-            val db = AppDatabase.getDatabase(applicationContext)
             val today = Calendar.getInstance().apply {
                 set(Calendar.HOUR_OF_DAY, 0)
                 set(Calendar.MINUTE, 0)
@@ -23,7 +31,7 @@ class RoastWorker(context: Context, params: WorkerParameters) : CoroutineWorker(
             }.timeInMillis
             val tomorrow = today + 86400000
 
-            val tasks = db.taskDao().getTasksForDateRange(today, tomorrow)
+            val tasks = taskDao.getTasksForDateRange(today, tomorrow)
             val completed = tasks.count { it.done }
             val total = tasks.size
 
