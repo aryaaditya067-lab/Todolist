@@ -1,9 +1,0 @@
-<resources>
-    <!-- Use Theme.AppCompat as parent because WearMainActivity extends AppCompatActivity -->
-    <style name="WearAppTheme" parent="Theme.AppCompat">
-        <item name="android:windowBackground">#0D0D1A</item>
-        <item name="android:statusBarColor">#00000000</item>
-        <item name="windowNoTitle">true</item>
-        <item name="windowActionBar">false</item>
-    </style>
-</resources>
